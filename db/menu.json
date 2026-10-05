@@ -1,0 +1,24 @@
+{
+  "salon": "Kathara (demo)",
+  "stylists": [
+    {"name": "Priya", "tier": "stylist"},
+    {"name": "Ravi", "tier": "senior"},
+    {"name": "Meena", "tier": "master"},
+    {"name": "Arjun", "tier": "creative"}
+  ],
+  "services": [
+    {"id": "haircut_women", "name": "Women's haircut with wash and blast dry", "minutes": 60, "price_source": "sourced",
+     "prices": {"stylist": 1090, "senior": 1190, "master": 1490, "creative": 1690}},
+    {"id": "haircut_men", "name": "Men's haircut with wash and styling", "minutes": 30, "price_source": "sourced",
+     "prices": {"stylist": 590, "master": 810, "creative": 990}},
+    {"id": "manicure", "name": "Classic scrub manicure", "minutes": 45, "price_source": "sourced", "price": 690},
+    {"id": "pedicure", "name": "Classic scrub pedicure", "minutes": 60, "price_source": "sourced", "price": 790},
+    {"id": "gel_polish", "name": "Classic gel polish, both hands", "minutes": 45, "price_source": "sourced", "price": 790},
+    {"id": "eyebrow", "name": "Eyebrow threading", "minutes": 10, "price_source": "placeholder", "price": 60},
+    {"id": "detan", "name": "De tan treatment", "minutes": 30, "price_source": "placeholder", "price": 900},
+    {"id": "waxing", "name": "Waxing, full arms", "minutes": 30, "price_source": "placeholder", "price": 399},
+    {"id": "massage", "name": "Head and foot massage", "minutes": 45, "price_source": "placeholder", "price": 899},
+    {"id": "nail_enhancement", "name": "Nail enhancements", "minutes": 90, "price_source": "placeholder", "price": 1500},
+    {"id": "bridal", "name": "Bridal grooming, starting price", "minutes": 180, "price_source": "sourced", "price": 7209}
+  ]
+}

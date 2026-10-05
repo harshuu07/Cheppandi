@@ -1,0 +1,15 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16        # Postgres with vector search built in
+    container_name: cheppandi_db         # fixed name so commands can find it
+    environment:
+      POSTGRES_USER: cheppandi           # database login name
+      POSTGRES_PASSWORD: cheppandisir  # read from .env, never hardcoded
+      POSTGRES_DB: cheppandi             # database created on first start
+    ports:
+      - "${DB_PORT}:5432"                # free host port from .env, Postgres port inside
+    volumes:
+      - cheppandi_pgdata:/var/lib/postgresql/data   # keeps data after restarts
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql  # runs once on first start
+volumes:
+  cheppandi_pgdata:
