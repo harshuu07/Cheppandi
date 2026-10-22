@@ -8,10 +8,11 @@ load_dotenv(override=True)  # puts DB_PORT and DB_PASSWORD from .env into the en
 
 def connect() -> psycopg.Connection:  # opens one database connection
     return psycopg.connect(  # asks psycopg to connect
-        host="localhost",  # the database runs on this computer, inside Docker
+        host="127.0.0.1",  # the database runs on this computer, inside Docker
         port=int(os.environ["DB_PORT"]),  # the free port we saved in .env
         dbname="cheppandi",  # database name from docker-compose.yml
         user="cheppandi",  # login name from docker-compose.yml
         password=os.environ["DB_PASSWORD"],  # password stays in .env, never in code
         row_factory=dict_row,  # rows become {"column": value} dictionaries
+        connect_timeout=3,  # give up after 3 seconds if the database does not answer
     )
