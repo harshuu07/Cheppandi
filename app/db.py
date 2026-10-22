@@ -1,9 +1,9 @@
-import os  # reads environment variables
+﻿import os  # reads environment variables
 import psycopg  # the PostgreSQL driver
 from psycopg.rows import dict_row  # makes rows come back as dictionaries
 from dotenv import load_dotenv  # loads the .env file
 
-load_dotenv()  # puts DB_PORT and DB_PASSWORD from .env into the environment
+load_dotenv(override=True)  # puts DB_PORT and DB_PASSWORD from .env into the environment
 
 
 def connect() -> psycopg.Connection:  # opens one database connection
