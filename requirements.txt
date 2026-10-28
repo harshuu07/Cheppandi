@@ -5,3 +5,4 @@ uvicorn[standard]
 pytest
 pytest-asyncio
 httpx
+google-genai

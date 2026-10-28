@@ -1,0 +1,17 @@
+[
+  {"q": "Can I pay by card?", "expected": "Payment"},
+  {"q": "Do you accept Google Pay?", "expected": "Payment"},
+  {"q": "What time do you close?", "expected": "Hours"},
+  {"q": "Are you open on Sundays?", "expected": "Hours"},
+  {"q": "Do I need to book or can I just walk in?", "expected": "Booking"},
+  {"q": "Is a patch test needed before hair colour?", "expected": "Colour"},
+  {"q": "How long does hair colouring take?", "expected": "Colour"},
+  {"q": "I want to cancel, how early should I tell you?", "expected": "Cancellation"},
+  {"q": "What if I reach 20 minutes late?", "expected": "Late arrival"},
+  {"q": "Why does the price change with the stylist?", "expected": "Prices"},
+  {"q": "Do you sell shampoo?", "expected": null},
+  {"q": "What is the capital of France?", "expected": null},
+  {"q": "Do you offer bridal makeup?", "expected": null},
+  {"q": "Where is the salon located?", "expected": null},
+  {"q": "Can I get a refund?", "expected": null}
+]
