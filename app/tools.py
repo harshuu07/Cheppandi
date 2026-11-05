@@ -15,12 +15,13 @@ class ConfirmationNeeded(booking.BookingError):  # raised when a booking is save
     pass  # the class name carries the meaning
 
 
-class Session:  # the state of one phone call, shared by the conversation loop and the tools
+class Session:  # the notepad for one phone call, shared by the conversation loop and the tools
     def __init__(self):  # runs when a new call starts
         self.id = uuid.uuid4().hex[:8]  # short id for this call
         self.turn = 0  # how many messages the caller has sent so far
         self.proposal = None  # the booking waiting for the caller's yes
-        self.last_booking_id = None  # the most recent confirmed booking
+        self.confirmed = {}  # every booking saved in this call, looked up by its fingerprint
+        self.last_booking_id = None  # the most recent confirmed booking that is still active
 
 
 def _plain(result):  # turns datetimes and ids into plain text so the model can read the result
@@ -43,6 +44,10 @@ def _parse_start(day, time_text):  # builds a start time in India time from two 
         raise booking.BadInput("Time must look like 17:30")  # tell it how to fix the call
 
 
+def _fingerprint(phone, stylist, start, service_ids):  # a hashable summary of a booking, used to recognise repeats
+    return (phone, stylist.lower(), start.isoformat(), tuple(sorted(service_ids)))  # the same visit always gives the same tuple
+
+
 def _safe(name, args, fn):  # runs a tool, turns every failure into an answer the model can read, and prints a trace line
     try:  # normal path
         result = _plain(fn())  # run the tool and clean up the result
@@ -56,7 +61,7 @@ def _safe(name, args, fn):  # runs a tool, turns every failure into an answer th
     return result  # handed back to the model
 
 
-def make_tools(session):  # builds the toolbox for one call, tied to that call's session state
+def make_tools(session):  # builds the toolbox for one call, tied to that call's notepad
     def get_menu() -> dict:
         """Returns the salon's stylists with their levels, and every service with its duration in minutes and price. Some services have one flat price and some have a price per stylist level."""
         def run():  # the real work, wrapped by _safe below
@@ -85,7 +90,7 @@ def make_tools(session):  # builds the toolbox for one call, tied to that call's
         return _safe("find_free_slots", f"{stylist}, {service_ids}, {day}", run)
 
     def propose_booking(customer_name: str, customer_phone: str, stylist: str, day: str, time: str, service_ids: list[str]) -> dict:
-        """Checks a booking and prepares it WITHOUT saving it. Call it once you have the name, a confirmed 10 digit phone number, the stylist, the day as 2030-02-20, the time as 17:30 in India time, and the service ids. Then read the returned summary to the caller, including the total price, and wait for their clear yes. Call it again if anything changes."""
+        """Checks a booking and prepares it WITHOUT saving it. Call it once you have the name, a confirmed 10 digit phone number, the stylist, the day as 2030-02-20, the time as 17:30 in India time, and the service ids. Then read the returned summary to the caller, including the total price, and wait for their clear yes. Call it again if anything changes. If the result says already_confirmed, the booking is already saved, so tell the caller it is booked."""
         def run():  # the real work, wrapped by _safe below
             name = customer_name.strip()  # remove stray spaces
             digits = "".join(ch for ch in customer_phone if ch.isdigit())  # phone digits only
@@ -104,6 +109,14 @@ def make_tools(session):  # builds the toolbox for one call, tied to that call's
             opens, closes = booking._hours(start.date())  # that day's opening hours
             if start < opens or end > closes:  # outside opening hours
                 raise booking.OutsideHours(f"We are open {booking.OPEN_HOUR}:00 to {booking.CLOSE_HOUR}:00")  # refuse
+            fp = _fingerprint(digits, st["name"], start, ids)  # a summary of this exact booking
+            if fp in session.confirmed:  # this exact booking was already saved in this call
+                return {
+                    **session.confirmed[fp],  # the saved booking, with all its details
+                    "status": "already_confirmed",  # replaces the old status
+                    "already_confirmed": True,  # an easy flag to check
+                    "next_step": "This booking is already saved. Tell the caller it is booked. Do not book it again.",
+                }
             if start not in booking.free_slots(st["name"], ids, start.date()):  # the stylist must really be free
                 raise booking.SlotTaken("That stylist is not free at that time")  # refuse
             session.proposal = {  # remember the booking, and which turn it was proposed in
@@ -125,16 +138,20 @@ def make_tools(session):  # builds the toolbox for one call, tied to that call's
         return _safe("propose_booking", f"{customer_name}, {stylist}, {day} {time}, {service_ids}", run)
 
     def confirm_booking() -> dict:
-        """Saves the booking that propose_booking prepared. Call it only after the caller has heard the read back and replied with a clear yes. It refuses if the caller has not replied since the read back."""
+        """Saves the booking that propose_booking prepared. Call it only after the caller has heard the read back and replied with a clear yes. It refuses if the caller has not replied since the read back. If it returns already_confirmed, the booking was saved earlier, so tell the caller it is booked."""
         def run():  # the real work, wrapped by _safe below
             p = session.proposal  # the booking waiting for confirmation
-            if p is None:  # nothing was proposed
+            if p is None:  # nothing is waiting
+                if session.confirmed:  # but a booking was already saved in this call
+                    last = list(session.confirmed.values())[-1]  # the most recent saved booking
+                    return {**last, "already_confirmed": True}  # report it again, save nothing
                 raise ConfirmationNeeded("There is no booking waiting. Call propose_booking first.")  # refuse
             if session.turn <= p["turn"]:  # the caller has not spoken since the proposal
                 raise ConfirmationNeeded("The caller has not replied since the read back. Read the booking back and wait for a clear yes.")  # refuse
-            raw = f"{session.id}|{p['phone']}|{p['stylist'].lower()}|{p['start'].isoformat()}|{sorted(p['service_ids'])}"  # defines this attempt
+            raw = f"{session.id}|{p['turn']}|{p['phone']}|{p['stylist'].lower()}|{p['start'].isoformat()}|{sorted(p['service_ids'])}"  # defines this attempt, including the turn
             key = hashlib.sha256(raw.encode()).hexdigest()[:32]  # the same attempt gives the same ticket, so retries are safe
             result = booking.create_booking(key, p["name"], p["phone"], p["stylist"], p["start"], p["service_ids"])  # the tested brain
+            session.confirmed[_fingerprint(p["phone"], p["stylist"], p["start"], p["service_ids"])] = result  # remember it
             session.last_booking_id = result["booking_id"]  # remember it for a later cancel
             session.proposal = None  # nothing is waiting any more
             return result
@@ -142,7 +159,14 @@ def make_tools(session):  # builds the toolbox for one call, tied to that call's
 
     def cancel_appointment(booking_id: str) -> dict:
         """Cancels an existing booking using the booking id that was returned when it was booked."""
-        return _safe("cancel_appointment", booking_id, lambda: booking.cancel_booking(booking_id))  # the tested brain
+        def run():  # the real work, wrapped by _safe below
+            result = booking.cancel_booking(booking_id)  # the tested brain
+            for fp in [k for k, v in session.confirmed.items() if v["booking_id"] == result["booking_id"]]:  # find the matching entries
+                del session.confirmed[fp]  # forget them, so the same visit can be booked again
+            if session.last_booking_id == result["booking_id"]:  # it was the most recent one
+                session.last_booking_id = None  # nothing active is left to remember
+            return result
+        return _safe("cancel_appointment", booking_id, run)
 
     def answer_policy_question(question: str) -> dict:
         """Answers questions about salon hours, booking, cancellation, late arrival, payment and colour treatments, using only the salon's written policies. If grounded is false, the policies do not cover the question."""

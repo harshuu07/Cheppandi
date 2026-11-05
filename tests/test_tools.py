@@ -34,8 +34,8 @@ def setup():  # a fresh call with its own toolbox
     return session, make_tools(session)  # the state and the tools tied to it
 
 
-def propose(tools, service_ids=("haircut_men",)):  # shortcut for proposing the standard test booking
-    return tools["propose_booking"]("Guard Test", PHONE, "Meena", DAY, "12:00", list(service_ids))  # saves nothing
+def propose(tools, service_ids=("haircut_men",), time="12:00"):  # shortcut for proposing a test booking
+    return tools["propose_booking"]("Guard Test", PHONE, "Meena", DAY, time, list(service_ids))  # saves nothing
 
 
 def test_confirm_without_proposal_is_refused():  # nothing was proposed, so nothing can be saved
@@ -65,15 +65,43 @@ def test_confirm_after_caller_reply_saves():  # the normal path
     assert count() == 1  # exactly one row exists
 
 
-def test_second_confirm_is_refused():  # confirming twice must not book twice
+def test_second_confirm_does_not_book_twice():  # confirming again must return the same booking, never a second one
     session, tools = setup()  # a fresh call
     session.turn = 1  # the caller asks for the booking
     propose(tools)  # the agent prepares it
     session.turn = 2  # the caller replies with yes
-    tools["confirm_booking"]()  # the first confirm saves it
-    session.turn = 3  # the caller says something else
-    assert tools["confirm_booking"]()["error"] == "ConfirmationNeeded"  # nothing is waiting any more
+    first = tools["confirm_booking"]()  # the first confirm saves it
+    session.turn = 3  # the model repeats itself, for example after a lost reply
+    again = tools["confirm_booking"]()  # a second confirm
+    assert again.get("already_confirmed") is True  # it is recognised as already done
+    assert again["booking_id"] == first["booking_id"]  # the same booking is returned
     assert count() == 1  # still exactly one row
+
+
+def test_proposing_the_same_booking_after_confirm_returns_it():  # a repeat proposal must not turn into SlotTaken
+    session, tools = setup()  # a fresh call
+    session.turn = 1  # the caller asks for the booking
+    propose(tools)  # the agent prepares it
+    session.turn = 2  # the caller replies with yes
+    first = tools["confirm_booking"]()  # the booking is saved
+    session.turn = 3  # the model starts over after a lost reply
+    again = propose(tools)  # it proposes the same booking again
+    assert again.get("status") == "already_confirmed"  # it is told the booking already exists
+    assert again["booking_id"] == first["booking_id"]  # the same booking is returned
+    assert count() == 1  # still exactly one row
+
+
+def test_a_different_second_booking_still_works():  # the fix must not block a genuine second booking
+    session, tools = setup()  # a fresh call
+    session.turn = 1  # the caller asks for the first booking
+    propose(tools)  # the agent prepares it
+    session.turn = 2  # the caller replies with yes
+    tools["confirm_booking"]()  # the first booking is saved
+    session.turn = 3  # the caller asks for another visit
+    assert propose(tools, time="15:00")["status"] == "awaiting_confirmation"  # a new time is a new proposal
+    session.turn = 4  # the caller replies with yes
+    assert tools["confirm_booking"]()["status"] == "confirmed"  # the second booking is saved
+    assert count() == 2  # two separate rows exist
 
 
 def test_changed_details_replace_the_proposal():  # the caller adds a manicure before saying yes
